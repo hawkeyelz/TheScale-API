@@ -1,0 +1,12 @@
+# --- The Scale Backend Requirements ---
+
+# For clean news scraping without the fluff
+trafilatura>=2.0.0
+
+# Core AI Engine (Llama-cpp-python)
+# Note: We install this via command line to ensure CUDA (GPU) support
+llama-cpp-python>=0.3.0
+
+# Standard utilities
+numpy
+requests
