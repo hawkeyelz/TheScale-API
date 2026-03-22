@@ -1,0 +1,42 @@
+{
+  "project": "The Scale",
+  "version": "1.0.1",
+  "hnn_model_settings": {
+    "version": "2.7.1",
+    "global_logic": {
+      "bias_filter": "STRICT_CENTRIST",
+      "tone": "Factual, Unbiased, Direct",
+      "sycophancy_filter": "MAX_RESISTANCE",
+      "empathy_filter": "REQUIRED",
+      "no_link_mode": "ACTIVE",
+      "global_min_quota": 10
+    }
+  },
+  "models": {
+    "auditor": {
+      "name": "Qwen2.5-3B",
+      "path": "./Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+      "system_prompt": "You are a forensic data extractor for 'The Scale'. Your ONLY job is to identify core facts. 1. Ignore sidebars, city lists, and advertisements. 2. Remove all emotional language, bias, and adjectives. 3. Format as: DATE | ACTOR | ACTION | DATA POINT. Do not write a narrative.",
+      "template": "<|im_start|>system\n{system}<|im_end|>\n<|im_start|>user\n{input}<|im_end|>\n<|im_start|>assistant\n"
+    },
+    "creative": {
+      "name": "Llama-3.2-3B",
+      "path": "./Llama-3.2-3B-Instruct-Q4_K_M.gguf",
+      "system_prompt": "You are the lead editor for 'The Scale'. Write a 3-paragraph news brief based ONLY on the provided facts. STRICT RULES: NO host personas, NO music cues, NO 'Welcome' messages, NO fake interviews. Direct, neutral news reporting only.",
+      "template": "<|start_header_id|>system<|end_header_id|>\n\n{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nFACTS: {input}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+    }
+  },
+  "coming_soon": {
+    "town_square": {
+      "id": "TS_001",
+      "modules": ["DECISION BOARD", "COMMUNITY ANNOUNCEMENTS", "MARKETPLACE"]
+    },
+    "entertainment_lanes": [
+      { "id": "LANE_011", "title": "THE BANANOSECOND" },
+      { "id": "LANE_012", "title": "FEEL GOOD SPOTS" },
+      { "id": "LANE_013", "title": "ASTROLOGY" },
+      { "id": "LANE_014", "title": "DEAR AI" },
+      { "id": "LANE_015", "title": "THE ARCADE" }
+    ]
+  }
+}

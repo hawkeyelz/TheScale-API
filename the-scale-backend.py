@@ -1,68 +1,107 @@
-import trafilatura
+import json
 import gc
 import time
+import trafilatura
 from llama_cpp import Llama
 
+# 1. LOAD CONFIGURATION
+# This pulls your Truth & Empathy prompts from config.json
+try:
+    with open("config.json", "r") as f:
+        config = json.load(f)
+except FileNotFoundError:
+    print("Error: config.json not found! Please create it in the same folder.")
+    exit()
+
 def fetch_clean_news(url):
-    print(f"--- Scraping: {url} ---")
-    downloaded = trafilatura.fetch_url(url)
-    # This extract call automatically finds the main body and strips the junk
-    text = trafilatura.extract(downloaded)
-    return text
+    print(f"\n[SCALING] Accessing: {url}")
+    try:
+        downloaded = trafilatura.fetch_url(url)
+        text = trafilatura.extract(downloaded)
+        return text
+    except Exception as e:
+        print(f"Scraping Error: {e}")
+        return None
 
 def run_auditor(raw_news_text):
-    print("--- Spinning up Auditor (Qwen) ---")
-    llm = Llama(model_path="./Qwen2.5-3B-Instruct-Q4_K_M.gguf", n_gpu_layers=-1, n_ctx=4096, verbose=False)
+    cfg = config["models"]["auditor"]
+    print(f"--- Loading Auditor ({cfg['name']}) to RTX 3050 ---")
     
-    # We use Qwen's specific ChatML format for better accuracy
-    prompt = f"<|im_start|>system\nExtract facts only. Remove all bias and adjectives.<|im_end|>\n<|im_start|>user\n{raw_news_text}<|im_end|>\n<|im_start|>assistant\n"
+    # n_gpu_layers=-1 ensures the 3050 handles the work
+    llm = Llama(
+        model_path=cfg["path"], 
+        n_gpu_layers=-1, 
+        n_ctx=4096, 
+        verbose=False
+    )
+    
+    # Format the ChatML prompt from config
+    prompt = cfg["template"].format(system=cfg["system_prompt"], input=raw_news_text)
     
     response = llm(prompt, max_tokens=1024, stop=["<|im_end|>"])
     result = response["choices"][0]["text"]
     
+    # KILL MODEL & CLEAR VRAM
     llm.close()
     del llm
     gc.collect()
+    time.sleep(2) # Give the GPU a breath
     return result
 
 def run_creative(facts):
-    print("--- Spinning up Creative (Llama) ---")
-    llm = Llama(model_path="./Llama-3.2-3B-Instruct-Q4_K_M.gguf", n_gpu_layers=-1, n_ctx=4096, verbose=False)
+    cfg = config["models"]["creative"]
+    print(f"--- Loading Creative ({cfg['name']}) to RTX 3050 ---")
     
-    # Llama 3.2 uses a different prompt template
-    prompt = f"<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nWrap these facts into a professional broadcast script for 'The Scale'.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{facts}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+    llm = Llama(
+        model_path=cfg["path"], 
+        n_gpu_layers=-1, 
+        n_ctx=4096, 
+        verbose=False
+    )
+    
+    # Format the Llama prompt from config
+    prompt = cfg["template"].format(system=cfg["system_prompt"], input=facts)
     
     response = llm(prompt, max_tokens=1024, stop=["<|eot_id|>"])
     result = response["choices"][0]["text"]
     
+    # FINAL VRAM CLEANUP
     llm.close()
     del llm
     gc.collect()
     return result
 
-# --- EXECUTION ---
+# --- AUTOMATED EXECUTION LOOP ---
 if __name__ == "__main__":
-    # This lets you paste the URL in the terminal at 3 AM without editing the file
-    target_url = input("Paste the news URL here: ").strip()
-    
-    if not target_url:
-        print("No URL provided. Exiting.")
-    else:
-        raw_article = fetch_clean_news(target_url)
+    # Add your URLs here to process them all at once
+    watch_list = [
+        "https://democracyforward.org/news/press-releases/federal-court-blocks-significant-pieces-of-administrations-sweeping-immigration-appeals-rule-that-eliminates-meaningful-judicial-review/",
+        "https://nationaltoday.com/us/ny/new-york/news/2026/02/22/apple-news-accused-of-excluding-conservative-outlets/"
+    ]
 
-        if raw_article:
-            audited_facts = run_auditor(raw_article)
+    print(f"Starting {config['project']} v{config['version']}...")
+    
+    for url in watch_list:
+        article_text = fetch_clean_news(url)
+        
+        if article_text:
+            # Stage 1: Audit
+            audited_facts = run_auditor(article_text)
             
-            print("\n" + "-"*30)
-            print("AUDITED FACTS (THE TRUTH):")
-            print(audited_facts)
-            print("-"*30 + "\n")
-            
+            # Stage 2: Create
             final_broadcast = run_creative(audited_facts)
             
-            print("\n" + "="*30)
-            print("FINAL 'THE SCALE' BROADCAST:")
-            print("="*30)
+            # OUTPUT TO CONSOLE
+            print("\n" + "="*50)
+            print(f"THE SCALE BROADCAST | SOURCE: {url}")
+            print("="*50)
             print(final_broadcast)
+            print("="*50 + "\n")
+            
+            # Pause to prevent overheating/overloading
+            print("Target complete. Resting VRAM for 10 seconds...")
+            time.sleep(10)
         else:
-            print("Error: Could not extract text from that URL. It might be blocked or empty.")
+            print(f"Skipping {url} - No content found.")
+
+    print("\nAll watch-list items processed. Backend standing by.")
