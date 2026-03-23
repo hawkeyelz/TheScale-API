@@ -1,0 +1,15 @@
+{
+  "coming_soon": {
+    "town_square": {
+      "id": "TS_001",
+      "modules": ["DECISION BOARD", "COMMUNITY ANNOUNCEMENTS", "MARKETPLACE"]
+    },
+    "entertainment_lanes": [
+      { "id": "LANE_011", "title": "THE BANANOSECOND" },
+      { "id": "LANE_012", "title": "FEEL GOOD SPOTS" },
+      { "id": "LANE_013", "title": "ASTROLOGY" },
+      { "id": "LANE_014", "title": "DEAR AI" },
+      { "id": "LANE_015", "title": "THE ARCADE" }
+    ]
+  }
+}

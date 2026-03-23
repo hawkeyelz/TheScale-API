@@ -1,17 +1,33 @@
+import os
 import json
 import gc
 import time
 import trafilatura
 from llama_cpp import Llama
 
-# 1. LOAD CONFIGURATION
-# This pulls your Truth & Empathy prompts from config.json
-try:
-    with open("config.json", "r") as f:
-        config = json.load(f)
-except FileNotFoundError:
-    print("Error: config.json not found! Please create it in the same folder.")
-    exit()
+# 1. THE MASTER LOADER
+def load_hnn_engine():
+    config_dir = "configs"
+    master_config = {}
+    config_files = [
+        "system_config.json", 
+        "lanes_config.json", 
+        "persona_config.json", 
+        "templates_config.json"
+    ]
+    
+    for filename in config_files:
+        path = os.path.join(config_dir, filename)
+        try:
+            with open(path, "r") as f:
+                master_config.update(json.load(f))
+        except FileNotFoundError:
+            print(f"CRITICAL: {filename} missing from /configs folder!")
+            exit(1)
+    return master_config
+
+# Initialize Global Config
+config = load_hnn_engine()
 
 def fetch_clean_news(url):
     print(f"\n[SCALING] Accessing: {url}")
@@ -24,48 +40,56 @@ def fetch_clean_news(url):
         return None
 
 def run_auditor(raw_news_text):
+    # Pulling from system_config.json and templates_config.json
     cfg = config["models"]["auditor"]
-    print(f"--- Loading Auditor ({cfg['name']}) to RTX 3050 ---")
+    tmpl = config["templates"]["auditor_v1"]
     
-    # n_gpu_layers=-1 ensures the 3050 handles the work
+    print(f"--- Loading Auditor ({cfg['name']}) ---")
+    
     llm = Llama(
         model_path=cfg["path"], 
-        n_gpu_layers=-1, 
-        n_ctx=4096, 
+        n_gpu_layers=cfg["n_gpu_layers"], 
+        n_ctx=cfg["n_ctx"], 
         verbose=False
     )
     
-    # Format the ChatML prompt from config
-    prompt = cfg["template"].format(system=cfg["system_prompt"], input=raw_news_text)
+    # Using the prompt template and the persona logic
+    prompt = tmpl["format"].format(
+        system=config["behavioral_anchors"]["truth_filter"], 
+        input=raw_news_text
+    )
     
     response = llm(prompt, max_tokens=1024, stop=["<|im_end|>"])
     result = response["choices"][0]["text"]
     
-    # KILL MODEL & CLEAR VRAM
     llm.close()
     del llm
     gc.collect()
-    time.sleep(2) # Give the GPU a breath
+    time.sleep(config["hardware_throttling"]["vram_cooldown_seconds"]) 
     return result
 
 def run_creative(facts):
+    # Pulling from system_config.json and templates_config.json
     cfg = config["models"]["creative"]
-    print(f"--- Loading Creative ({cfg['name']}) to RTX 3050 ---")
+    tmpl = config["templates"]["creative_hnn_standard"]
+    
+    print(f"--- Loading Creative ({cfg['name']}) ---")
     
     llm = Llama(
         model_path=cfg["path"], 
-        n_gpu_layers=-1, 
-        n_ctx=4096, 
+        n_gpu_layers=cfg["n_gpu_layers"], 
+        n_ctx=cfg["n_ctx"], 
         verbose=False
     )
     
-    # Format the Llama prompt from config
-    prompt = cfg["template"].format(system=cfg["system_prompt"], input=facts)
+    prompt = tmpl["format"].format(
+        system=config["behavioral_anchors"]["empathy_filter"], 
+        input=facts
+    )
     
     response = llm(prompt, max_tokens=1024, stop=["<|eot_id|>"])
     result = response["choices"][0]["text"]
     
-    # FINAL VRAM CLEANUP
     llm.close()
     del llm
     gc.collect()
@@ -73,7 +97,6 @@ def run_creative(facts):
 
 # --- AUTOMATED EXECUTION LOOP ---
 if __name__ == "__main__":
-    # Add your URLs here to process them all at once
     watch_list = [
         "https://democracyforward.org/news/press-releases/federal-court-blocks-significant-pieces-of-administrations-sweeping-immigration-appeals-rule-that-eliminates-meaningful-judicial-review/",
         "https://nationaltoday.com/us/ny/new-york/news/2026/02/22/apple-news-accused-of-excluding-conservative-outlets/"
@@ -85,22 +108,19 @@ if __name__ == "__main__":
         article_text = fetch_clean_news(url)
         
         if article_text:
-            # Stage 1: Audit
             audited_facts = run_auditor(article_text)
-            
-            # Stage 2: Create
             final_broadcast = run_creative(audited_facts)
             
-            # OUTPUT TO CONSOLE
             print("\n" + "="*50)
             print(f"THE SCALE BROADCAST | SOURCE: {url}")
             print("="*50)
             print(final_broadcast)
             print("="*50 + "\n")
             
-            # Pause to prevent overheating/overloading
-            print("Target complete. Resting VRAM for 10 seconds...")
-            time.sleep(10)
+            # Using the hardware_throttling value from system_config.json
+            wait_time = config["hardware_throttling"]["batch_cooldown_seconds"]
+            print(f"Target complete. Resting for {wait_time} seconds...")
+            time.sleep(wait_time)
         else:
             print(f"Skipping {url} - No content found.")
 
