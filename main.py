@@ -22,22 +22,35 @@ def get_db():
 def read_broadcasts(skip: int = 0, limit: int = 10, db: Session = Depends(get_db)):
     return crud.get_broadcasts(db, skip=skip, limit=limit)
 
+# --- NEW SOURCES ENDPOINTS ---
+@app.get("/sources")
+def list_sources(db: Session = Depends(get_db)):
+    return crud.get_sources(db)
+
+@app.post("/sources")
+def add_source(name: str, url: str, db: Session = Depends(get_db)):
+    return crud.create_source(db, name=name, url=url)
+# -----------------------------
+
 @app.post("/process-now")
 def trigger_manual_scale(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    # Check if we have sources before starting
+    sources = crud.get_sources(db)
+    if not sources:
+        return {"message": "No sources found in database. Please add a source first."}
+    
     background_tasks.add_task(run_crawler_task, db)
-    return {"message": "Scaling process started in background."}
+    return {"message": f"Scaling process started for {len(sources)} sources."}
 
 def run_crawler_task(db: Session):
     config = load_hnn_engine()
     inference = HNNInferenceEngine(config)
     
-    # This list will eventually come from a 'sources' table in the DB
-    watch_list = [
-        "https://democracyforward.org/news/press-releases/federal-court-blocks-significant-pieces-of-administrations-sweeping-immigration-appeals-rule-that-eliminates-meaningful-judicial-review/",
-        "https://nationaltoday.com/us/ny/new-york/news/2026/02/22/apple-news-accused-of-excluding-conservative-outlets/"
-    ]
+    # Now pulling dynamically from your database!
+    sources = crud.get_sources(db)
     
-    for url in watch_list:
+    for source in sources:
+        url = source.url
         if crud.get_broadcast_by_url(db, url):
             continue
             
